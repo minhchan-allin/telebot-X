@@ -1,31 +1,48 @@
+import os
+import time
+import requests
 import snscrape.modules.twitter as sntwitter
-import asyncio
-from telegram import Bot
+from dotenv import load_dotenv
 
-TELEGRAM_BOT_TOKEN = '8340498820:AAHunbMFycOrOtL7Ov5a81mmOROa8xoLgeQ'
-TELEGRAM_CHAT_ID = -4884617653  # thay bằng chat_id nhóm của bạn (số âm nếu là private group)
-RSS_FEED_URL = 'grutgrutx'
+# Load biến môi trường từ file .env
+load_dotenv()
 
-bot = Bot(token=TELEGRAM_BOT_TOKEN)
-last_tweet_id = None
+# Lấy token & chat ID từ biến môi trường
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+TWITTER_USERNAME = os.getenv("TWITTER_USERNAME")
 
-async def check_tweet():
-    global last_tweet_id
-    tweets = sntwitter.TwitterUserScraper(TWITTER_USERNAME).get_items()
+# Hàm gửi tin nhắn Telegram
+def send_to_telegram(message):
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+    data = {
+        "chat_id": TELEGRAM_CHAT_ID,
+        "text": message,
+        "parse_mode": "HTML"
+    }
+    response = requests.post(url, data=data)
+    if not response.ok:
+        print("❌ Failed to send message:", response.text)
+
+# Hàm lấy tweet mới nhất
+def get_latest_tweet(username):
+    tweets = sntwitter.TwitterUserScraper(username).get_items()
     for tweet in tweets:
-        if tweet.id != last_tweet_id:
-            last_tweet_id = tweet.id
-            message = f"🆕 New tweet by @{TWITTER_USERNAME}:\n\n{tweet.content}\n\n🔗 https://twitter.com/{TWITTER_USERNAME}/status/{tweet.id}"
-            await bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message)
-        break
+        return tweet.content.strip()
 
-async def main():
+# Vòng lặp kiểm tra tweet mới
+if __name__ == "__main__":
+    print("🚀 Bot đang chạy...")
+    last_tweet = None
     while True:
         try:
-            await check_tweet()
+            current_tweet = get_latest_tweet(TWITTER_USERNAME)
+            if current_tweet and current_tweet != last_tweet:
+                send_to_telegram(f"🆕 Bài mới từ @{TWITTER_USERNAME}:\n\n{current_tweet}")
+                last_tweet = current_tweet
+            else:
+                print("⏳ Không có tweet mới.")
         except Exception as e:
-            print(f"❌ Error: {e}")
-        await asyncio.sleep(30)  # vẫn phải kiểm tra định kỳ
+            print("⚠️ Lỗi:", str(e))
 
-if __name__ == '__main__':
-    asyncio.run(main())
+        time.sleep(30)  # kiểm tra mỗi 30 giây
